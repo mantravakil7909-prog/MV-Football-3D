@@ -1,0 +1,1703 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+
+<title>MV Football Deluxe 3D</title>
+
+<style>
+html,body{
+  margin:0;
+  width:100%;
+  height:100%;
+  overflow:hidden;
+  background:#071018;
+  font-family:Arial,sans-serif;
+  touch-action:none;
+}
+
+canvas{
+  display:block;
+  width:100%;
+  height:100%;
+}
+
+#start{
+  position:fixed;
+  z-index:20;
+  left:50%;
+  top:52%;
+  transform:translate(-50%,-50%);
+  padding:17px 34px;
+  border:0;
+  border-radius:14px;
+  background:#fff;
+  color:#071018;
+  font-weight:900;
+  font-size:21px;
+  box-shadow:0 10px 35px #0009;
+  cursor:pointer;
+  touch-action:manipulation;
+}
+
+#hud{
+  position:fixed;
+  z-index:10;
+  top:10px;
+  left:50%;
+  transform:translateX(-50%);
+  color:#fff;
+  text-align:center;
+  background:#071018cc;
+  border:1px solid #ffffff30;
+  border-radius:14px;
+  padding:7px 20px;
+  min-width:290px;
+}
+
+#hud b{
+  font-size:20px;
+}
+
+.sub{
+  font-size:10px;
+  opacity:.8;
+}
+
+#stats{
+  position:fixed;
+  z-index:10;
+  right:12px;
+  top:12px;
+  color:white;
+  background:#071018cc;
+  padding:9px 12px;
+  border-radius:12px;
+  font-size:12px;
+  line-height:1.7;
+}
+
+#msg{
+  position:fixed;
+  z-index:10;
+  bottom:12px;
+  left:50%;
+  transform:translateX(-50%);
+  background:#071018dd;
+  color:white;
+  padding:9px 15px;
+  border-radius:12px;
+  font-size:12px;
+  text-align:center;
+}
+
+#power{
+  position:fixed;
+  z-index:10;
+  right:12px;
+  bottom:52px;
+  width:160px;
+  height:13px;
+  border:2px solid white;
+  border-radius:10px;
+  overflow:hidden;
+  background:#111;
+}
+
+#power i{
+  display:block;
+  width:0;
+  height:100%;
+  background:linear-gradient(
+    90deg,
+    #23c552,
+    #ffd21a,
+    #ef3838
+  );
+}
+</style>
+</head>
+
+<body>
+
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div class="sub">PENALTY SHOOTOUT</div>
+  <b>
+    🇦🇷 ARGENTINA
+    &nbsp;
+    <span id="sc">0 - 0</span>
+    &nbsp;
+    🇫🇷 FRANCE
+  </b>
+</div>
+
+<div id="stats">
+  TIME <b id="tm">60</b>s<br>
+  GOALS <b id="gl">0</b><br>
+  STREAK <b id="st">0</b>
+</div>
+
+<div id="power">
+  <i id="bar"></i>
+</div>
+
+<div id="msg">
+  Beat the goalkeeper!
+</div>
+
+<button id="start" type="button">
+  ⚽ START GAME
+</button>
+
+<script>
+"use strict";
+
+const C=document.getElementById("c");
+const X=C.getContext("2d");
+
+let W=0;
+let H=0;
+let D=1;
+
+function size(){
+  W=innerWidth;
+  H=innerHeight;
+
+  D=Math.min(devicePixelRatio||1,2);
+
+  C.width=W*D;
+  C.height=H*D;
+
+  C.style.width=W+"px";
+  C.style.height=H+"px";
+
+  X.setTransform(D,0,0,D,0,0);
+}
+
+addEventListener("resize",size);
+size();
+
+let running=false;
+let over=false;
+
+let time=60;
+
+let goals=0;
+let streak=0;
+let best=0;
+
+let keeper=0;
+let dir=1;
+
+let shot=null;
+let drag=false;
+
+let ax=0;
+let ay=0;
+
+let mood="cheer";
+let moodT=0;
+
+let kickT=0;
+
+
+function txt(
+  s,
+  x,
+  y,
+  size,
+  align="center",
+  weight=700
+){
+  X.font=weight+" "+size+"px Arial";
+  X.textAlign=align;
+  X.fillText(s,x,y);
+}
+
+
+function clamp(a,b,c){
+  return Math.max(b,Math.min(c,a));
+}
+
+
+/* =========================
+   STADIUM
+========================= */
+
+function stadium(){
+
+  X.fillStyle="#071018";
+  X.fillRect(0,0,W,H*.39);
+
+  let g=X.createLinearGradient(
+    0,0,0,H*.12
+  );
+
+  g.addColorStop(0,"#03070b");
+  g.addColorStop(1,"#182634");
+
+  X.fillStyle=g;
+  X.fillRect(0,0,W,H*.12);
+
+
+  /* stands */
+
+  for(let r=0;r<8;r++){
+
+    let y=H*.14+r*24;
+
+    X.fillStyle=
+      r%2
+      ? "#263646"
+      : "#1d2b38";
+
+    X.fillRect(0,y,W,25);
+
+
+    for(
+      let i=-1;
+      i<W/17+2;
+      i++
+    ){
+
+      let px=
+        i*17+
+        (r%2)*8;
+
+      X.fillStyle=[
+        "#e8edf0",
+        "#72a9d7",
+        "#35516a",
+        "#d7a85b",
+        "#b34f57"
+      ][
+        ((i+r*3)%5+5)%5
+      ];
+
+      X.beginPath();
+
+      X.arc(
+        px,
+        y+7,
+        4.2,
+        0,
+        7
+      );
+
+      X.fill();
+
+      X.fillRect(
+        px-4,
+        y+11,
+        8,
+        9
+      );
+    }
+  }
+
+
+  /* crowd signs */
+
+  let signs=
+    mood==="critical"
+    ?
+    [
+      "BOOO!",
+      "MISS AGAIN!",
+      "SHOOT!",
+      "WAKE UP!"
+    ]
+    :
+    [
+      "VAMOS!",
+      "ARGENTINA!",
+      "MESSI 10!",
+      "GOOOOL!"
+    ];
+
+
+  for(let i=0;i<4;i++){
+
+    let px=W*(.14+i*.24);
+    let py=H*.13+(i%2)*31;
+
+    X.fillStyle="#f4f1e8";
+
+    X.fillRect(
+      px-40,
+      py-12,
+      80,
+      24
+    );
+
+    X.fillStyle="#173653";
+
+    txt(
+      signs[i],
+      px,
+      py+4,
+      9
+    );
+  }
+
+
+  txt(
+    mood==="critical"
+      ? "BOOOOOOO!"
+      : "VAMOS ARGENTINA!",
+    W/2,
+    H*.335,
+    24,
+    "center",
+    900
+  );
+}
+
+
+/* =========================
+   PITCH
+========================= */
+
+function pitch(){
+
+  let g=X.createLinearGradient(
+    0,H*.37,
+    0,H
+  );
+
+  g.addColorStop(0,"#277b3d");
+  g.addColorStop(1,"#0e5429");
+
+  X.fillStyle=g;
+
+  X.fillRect(
+    0,
+    H*.37,
+    W,
+    H*.63
+  );
+
+
+  /* grass perspective */
+
+  for(let i=0;i<14;i++){
+
+    X.fillStyle=
+      i%2
+      ? "#ffffff06"
+      : "#00000006";
+
+    X.beginPath();
+
+    X.moveTo(
+      W*.04+i*W*.07,
+      H
+    );
+
+    X.lineTo(
+      W*.47+i*W*.04,
+      H*.37
+    );
+
+    X.lineTo(
+      W*.53+i*W*.04,
+      H*.37
+    );
+
+    X.lineTo(
+      W*.96+i*W*.07,
+      H
+    );
+
+    X.closePath();
+
+    X.fill();
+  }
+
+
+  /* penalty area */
+
+  X.strokeStyle="#ffffffbb";
+  X.lineWidth=3;
+
+  X.beginPath();
+
+  X.moveTo(W*.22,H*.49);
+  X.lineTo(W*.78,H*.49);
+
+  X.lineTo(W*.91,H);
+
+  X.moveTo(W*.78,H*.49);
+  X.lineTo(W*.22,H*.49);
+
+  X.lineTo(W*.09,H);
+
+  X.stroke();
+
+
+  /* arc */
+
+  X.beginPath();
+
+  X.arc(
+    W/2,
+    H*.77,
+    W*.115,
+    Math.PI*1.12,
+    Math.PI*1.88
+  );
+
+  X.stroke();
+
+
+  X.fillStyle="#fff";
+
+  X.beginPath();
+
+  X.arc(
+    W/2,
+    H*.77,
+    4,
+    0,
+    7
+  );
+
+  X.fill();
+}
+
+
+/* =========================
+   GOAL
+========================= */
+
+function goal(){
+
+  let gx=W/2;
+
+  let gy=H*.39;
+
+  let gw=Math.min(
+    W*.64,
+    650
+  );
+
+  let gh=Math.min(
+    H*.24,
+    210
+  );
+
+  let d=gw*.12;
+
+
+  /* dark interior */
+
+  X.fillStyle="#06101899";
+
+  X.beginPath();
+
+  X.moveTo(
+    gx-gw/2,
+    gy
+  );
+
+  X.lineTo(
+    gx+gw/2,
+    gy
+  );
+
+  X.lineTo(
+    gx+gw/2-d,
+    gy+gh
+  );
+
+  X.lineTo(
+    gx-gw/2+d,
+    gy+gh
+  );
+
+  X.closePath();
+
+  X.fill();
+
+
+  /* net vertical lines */
+
+  X.strokeStyle="#ffffff35";
+  X.lineWidth=1;
+
+  for(let i=0;i<=16;i++){
+
+    let px=
+      gx-gw/2+
+      gw*i/16;
+
+    X.beginPath();
+
+    X.moveTo(px,gy);
+
+    X.lineTo(
+      px-d/2,
+      gy+gh
+    );
+
+    X.stroke();
+  }
+
+
+  /* net horizontal lines */
+
+  for(let i=0;i<=9;i++){
+
+    let py=
+      gy+gh*i/9;
+
+    X.beginPath();
+
+    X.moveTo(
+      gx-gw/2,
+      py
+    );
+
+    X.lineTo(
+      gx+gw/2,
+      py
+    );
+
+    X.stroke();
+  }
+
+
+  /* goal frame */
+
+  X.strokeStyle="#f5f7f8";
+
+  X.lineWidth=
+    Math.max(
+      6,
+      W*.007
+    );
+
+  X.lineCap="round";
+
+  X.beginPath();
+
+  X.moveTo(
+    gx-gw/2,
+    gy+gh
+  );
+
+  X.lineTo(
+    gx-gw/2,
+    gy
+  );
+
+  X.lineTo(
+    gx+gw/2,
+    gy
+  );
+
+  X.lineTo(
+    gx+gw/2,
+    gy+gh
+  );
+
+  X.stroke();
+}
+
+
+/* =========================
+   PLAYER
+========================= */
+
+function human(
+  px,
+  py,
+  scale,
+  kit,
+  number,
+  goalkeeper=false,
+  jump=0,
+  lean=0
+){
+
+  X.save();
+
+  X.translate(
+    px,
+    py-jump
+  );
+
+  X.rotate(lean);
+
+  X.scale(
+    scale,
+    scale
+  );
+
+
+  /* shadow */
+
+  X.fillStyle="#0005";
+
+  X.beginPath();
+
+  X.ellipse(
+    0,
+    8,
+    35,
+    7,
+    0,
+    0,
+    7
+  );
+
+  X.fill();
+
+
+  /* kicking animation */
+
+  let k=
+    kickT>0
+    ?
+    Math.sin(
+      Math.min(1,kickT)*Math.PI
+    )
+    :
+    0;
+
+  let kickX=
+    12+
+    42*k;
+
+  let kickY=
+    -2-
+    12*k;
+
+
+  /* legs */
+
+  X.strokeStyle=kit.shorts;
+  X.lineWidth=13;
+  X.lineCap="round";
+
+  X.beginPath();
+
+  X.moveTo(-12,-2);
+  X.lineTo(-15,25);
+
+  X.moveTo(12,-2);
+  X.lineTo(kickX,kickY);
+
+  X.stroke();
+
+
+  /* knees */
+
+  X.fillStyle="#c78361";
+
+  X.beginPath();
+
+  X.arc(
+    -15,
+    26,
+    5,
+    0,
+    7
+  );
+
+  X.arc(
+    kickX,
+    kickY,
+    5,
+    0,
+    7
+  );
+
+  X.fill();
+
+
+  /* socks */
+
+  X.strokeStyle=kit.socks;
+  X.lineWidth=11;
+
+  X.beginPath();
+
+  X.moveTo(
+    -15,
+    29
+  );
+
+  X.lineTo(
+    -18,
+    55
+  );
+
+  X.moveTo(
+    kickX,
+    kickY+3
+  );
+
+  X.lineTo(
+    kickX+8,
+    kickY+28
+  );
+
+  X.stroke();
+
+
+  /* boots */
+
+  X.fillStyle=kit.boots;
+
+  X.fillRect(
+    -27,
+    52,
+    20,
+    7
+  );
+
+
+  X.save();
+
+  X.translate(
+    kickX+8,
+    kickY+28
+  );
+
+  X.rotate(.28);
+
+  X.fillRect(
+    -2,
+    0,
+    25,
+    7
+  );
+
+  X.restore();
+
+
+  /* torso */
+
+  X.fillStyle=kit.shirt;
+
+  X.beginPath();
+
+  X.moveTo(
+    -23,
+    -55
+  );
+
+  X.quadraticCurveTo(
+    -30,
+    -48,
+    -25,
+    -4
+  );
+
+  X.lineTo(
+    25,
+    -4
+  );
+
+  X.quadraticCurveTo(
+    30,
+    -48,
+    23,
+    -55
+  );
+
+  X.closePath();
+
+  X.fill();
+
+
+  /* jersey stripes */
+
+  if(kit.stripes){
+
+    X.fillStyle=kit.stripes;
+
+    X.fillRect(
+      -25,
+      -42,
+      50,
+      9
+    );
+
+    X.fillRect(
+      -25,
+      -20,
+      50,
+      9
+    );
+  }
+
+
+  /* shoulders and arms */
+
+  X.strokeStyle=kit.sleeves;
+  X.lineWidth=10;
+
+  X.beginPath();
+
+  X.moveTo(
+    -23,
+    -43
+  );
+
+  X.lineTo(
+    -34,
+    -19
+  );
+
+  X.moveTo(
+    23,
+    -43
+  );
+
+  X.lineTo(
+    34,
+    -19
+  );
+
+  X.stroke();
+
+
+  /* hands */
+
+  X.fillStyle="#c78361";
+
+  X.beginPath();
+
+  X.arc(
+    -35,
+    -17,
+    5,
+    0,
+    7
+  );
+
+  X.arc(
+    35,
+    -17,
+    5,
+    0,
+    7
+  );
+
+  X.fill();
+
+
+  /* arms */
+
+  X.strokeStyle="#c78361";
+  X.lineWidth=9;
+
+  X.beginPath();
+
+  X.moveTo(
+    -35,
+    -15
+  );
+
+  X.lineTo(
+    -40,
+    5
+  );
+
+  X.moveTo(
+    35,
+    -15
+  );
+
+  X.lineTo(
+    40,
+    5
+  );
+
+  X.stroke();
+
+
+  /* neck */
+
+  X.fillStyle="#c78361";
+
+  X.fillRect(
+    -7,
+    -66,
+    14,
+    13
+  );
+
+
+  /* head */
+
+  X.beginPath();
+
+  X.arc(
+    0,
+    -79,
+    18,
+    0,
+    7
+  );
+
+  X.fill();
+
+
+  /* hair */
+
+  X.fillStyle="#17130f";
+
+  X.beginPath();
+
+  X.arc(
+    0,
+    -87,
+    18,
+    Math.PI,
+    7
+  );
+
+  X.fill();
+
+
+  /* number */
+
+  if(number){
+
+    X.fillStyle=kit.num;
+
+    txt(
+      String(number),
+      0,
+      -10,
+      31
+    );
+  }
+
+
+  /* goalkeeper gloves */
+
+  if(goalkeeper){
+
+    X.fillStyle="#f5f5f5";
+
+    X.beginPath();
+
+    X.arc(
+      -43,
+      7,
+      8,
+      0,
+      7
+    );
+
+    X.arc(
+      43,
+      7,
+      8,
+      0,
+      7
+    );
+
+    X.fill();
+  }
+
+
+  X.restore();
+}
+
+
+/* =========================
+   KITS
+========================= */
+
+const ARG={
+  shirt:"#f5f5f3",
+  stripes:"#79b8e8",
+  sleeves:"#79b8e8",
+  shorts:"#151b25",
+  socks:"#f5f5f3",
+  boots:"#10151a",
+  num:"#142235"
+};
+
+const FRA={
+  shirt:"#123e86",
+  stripes:"#e33e4d",
+  sleeves:"#123e86",
+  shorts:"#132a5b",
+  socks:"#f4f4f4",
+  boots:"#111",
+  num:"#fff"
+};
+
+
+/* =========================
+   BALL
+========================= */
+
+function ball(){
+
+  /*
+    Ball sits near the player's foot
+    before the shot.
+  */
+
+  let x=W/2;
+  let y=H*.84;
+  let r=12;
+
+
+  if(shot){
+
+    x=shot.x;
+    y=shot.y;
+
+    r=
+      12*
+      (1-shot.t*.22);
+  }
+
+
+  /* shadow */
+
+  X.fillStyle="#0006";
+
+  X.beginPath();
+
+  X.ellipse(
+    x,
+    y+9,
+    r*1.45,
+    r*.42,
+    0,
+    0,
+    7
+  );
+
+  X.fill();
+
+
+  /* ball shading */
+
+  let g=X.createRadialGradient(
+    x-r*.35,
+    y-r*.45,
+    1,
+    x,
+    y,
+    r
+  );
+
+  g.addColorStop(
+    0,
+    "#ffffff"
+  );
+
+  g.addColorStop(
+    .55,
+    "#f1f4f5"
+  );
+
+  g.addColorStop(
+    1,
+    "#9da8ae"
+  );
+
+  X.fillStyle=g;
+
+  X.beginPath();
+
+  X.arc(
+    x,
+    y,
+    r,
+    0,
+    7
+  );
+
+  X.fill();
+
+
+  /* central football panel */
+
+  X.strokeStyle="#4d5b63";
+  X.lineWidth=1.2;
+
+  X.fillStyle="#293840";
+
+  X.beginPath();
+
+  for(let i=0;i<5;i++){
+
+    let a=
+      -Math.PI/2+
+      i*Math.PI*2/5;
+
+    let px=
+      x+
+      Math.cos(a)*r*.34;
+
+    let py=
+      y+
+      Math.sin(a)*r*.34;
+
+    if(i)
+      X.lineTo(px,py);
+    else
+      X.moveTo(px,py);
+  }
+
+  X.closePath();
+
+  X.fill();
+
+
+  /* football panel lines */
+
+  for(let i=0;i<5;i++){
+
+    let a=
+      -Math.PI/2+
+      i*Math.PI*2/5;
+
+    X.beginPath();
+
+    X.moveTo(
+      x+Math.cos(a)*r*.34,
+      y+Math.sin(a)*r*.34
+    );
+
+    X.lineTo(
+      x+Math.cos(a)*r*.78,
+      y+Math.sin(a)*r*.78
+    );
+
+    X.stroke();
+  }
+
+
+  /* highlight */
+
+  X.fillStyle="#fff9";
+
+  X.beginPath();
+
+  X.arc(
+    x-r*.35,
+    y-r*.4,
+    r*.22,
+    0,
+    7
+  );
+
+  X.fill();
+}
+
+
+/* =========================
+   SHOOT
+========================= */
+
+function shoot(tx,ty){
+
+  kickT=0;
+
+  let dx=
+    (tx-W/2)/W;
+
+  let dy=
+    (ty-H*.84)/H;
+
+
+  shot={
+    t:0,
+
+    sx:W/2,
+    sy:H*.84,
+
+    ex:
+      W/2+
+      clamp(
+        dx*2.4,
+        -.9,
+        .9
+      )*
+      W*.36,
+
+    ey:
+      H*.47+
+      clamp(
+        dy*1.5,
+        -.6,
+        .35
+      )*
+      H*.10,
+
+    target:
+      clamp(
+        dx*2.4,
+        -.9,
+        .9
+      )
+  };
+}
+
+
+/* =========================
+   RESET
+========================= */
+
+function reset(){
+
+  goals=0;
+
+  streak=0;
+
+  time=60;
+
+  shot=null;
+
+  drag=false;
+
+  keeper=0;
+
+  dir=1;
+
+  kickT=0;
+
+  mood="cheer";
+
+  moodT=0;
+
+  over=false;
+
+  tm.textContent="60";
+
+  gl.textContent="0";
+
+  st.textContent="0";
+
+  sc.textContent="0 - 0";
+}
+
+
+/* =========================
+   START GAME
+========================= */
+
+function startGame(){
+
+  if(running)
+    return;
+
+  reset();
+
+  running=true;
+
+  start.style.display="none";
+
+  msg.textContent=
+    "Drag from the ball and release to shoot!";
+}
+
+
+start.onclick=startGame;
+
+
+/* =========================
+   TOUCH / MOUSE
+========================= */
+
+C.addEventListener(
+  "pointerdown",
+  e=>{
+
+    if(!running||shot)
+      return;
+
+    drag=true;
+
+    ax=e.clientX;
+    ay=e.clientY;
+  }
+);
+
+
+C.addEventListener(
+  "pointermove",
+  e=>{
+
+    if(drag){
+
+      ax=e.clientX;
+      ay=e.clientY;
+    }
+  }
+);
+
+
+C.addEventListener(
+  "pointerup",
+  e=>{
+
+    if(!drag)
+      return;
+
+    drag=false;
+
+    shoot(
+      e.clientX,
+      e.clientY
+    );
+
+    bar.style.width="0";
+  }
+);
+
+
+/* =========================
+   UPDATE
+========================= */
+
+let last=
+  performance.now();
+
+
+function update(dt){
+
+  if(!running)
+    return;
+
+
+  /* 60 second timer */
+
+  time-=dt;
+
+  tm.textContent=
+    Math.max(
+      0,
+      Math.ceil(time)
+    );
+
+
+  if(time<=0){
+
+    running=false;
+
+    over=true;
+
+    start.textContent=
+      "🔄 PLAY AGAIN";
+
+    start.style.display=
+      "block";
+
+    msg.textContent=
+      "⏱️ TIME UP! FINAL SCORE: "+
+      goals;
+
+    return;
+  }
+
+
+  /*
+    Goalkeeper remains completely
+    still before the shot.
+  */
+
+  if(!shot){
+
+    keeper=0;
+  }
+
+
+  if(moodT>0)
+    moodT-=dt;
+  else
+    mood="cheer";
+
+
+  /* kick animation */
+
+  if(kickT<1){
+
+    kickT=
+      Math.min(
+        1,
+        kickT+dt*5.2
+      );
+  }
+
+
+  /* ball flight */
+
+  if(shot){
+
+    shot.t+=dt*1.65;
+
+    let t=shot.t;
+
+
+    shot.x=
+      shot.sx+
+      (shot.ex-shot.sx)*t;
+
+
+    shot.y=
+      shot.sy+
+      (shot.ey-shot.sy)*t-
+      45*Math.sin(
+        Math.PI*t
+      );
+
+
+    if(t>=1){
+
+      /*
+        70% chance:
+        GOAL
+
+        30% chance:
+        GOALKEEPER SAVE
+      */
+
+      let saved=
+        Math.random()>=0.70;
+
+
+      if(saved){
+
+        streak=0;
+
+        mood="critical";
+
+        moodT=2.8;
+
+        msg.textContent=
+          "🧤 SAVED! BOOOOO!";
+
+        st.textContent="0";
+
+      }else{
+
+        goals++;
+
+        streak++;
+
+        mood="cheer";
+
+        moodT=2.8;
+
+        msg.textContent=
+          "⚽ GOOOOAL! THE STADIUM ERUPTS!";
+
+        gl.textContent=
+          goals;
+
+        st.textContent=
+          streak;
+
+        sc.textContent=
+          goals+
+          " - 0";
+      }
+
+
+      shot=null;
+    }
+  }
+}
+
+
+/* =========================
+   DRAW
+========================= */
+
+function draw(){
+
+  X.clearRect(
+    0,
+    0,
+    W,
+    H
+  );
+
+
+  stadium();
+
+  pitch();
+
+  goal();
+
+
+  /*
+    Goalkeeper moves ONLY
+    after the shot.
+
+    He reaches toward the
+    ball's target throughout
+    its flight.
+  */
+
+  let diveT=
+    shot
+    ?
+    Math.min(
+      1,
+      shot.t
+    )
+    :
+    0;
+
+
+  let keeperJump=
+    shot
+    ?
+    Math.sin(
+      diveT*Math.PI
+    )*78
+    :
+    0;
+
+
+  let keeperReach=
+    shot
+    ?
+    shot.target*
+    W*.20*
+    Math.sin(
+      diveT*
+      Math.PI*
+      .92
+    )
+    :
+    0;
+
+
+  let keeperLean=
+    shot
+    ?
+    clamp(
+      shot.target*.95,
+      -.75,
+      .75
+    )
+    :
+    0;
+
+
+  human(
+    W/2+keeperReach,
+    H*.54,
+    .92,
+    FRA,
+    null,
+    true,
+    keeperJump,
+    keeperLean
+  );
+
+
+  /* Argentina #10 */
+
+  human(
+    W/2,
+    H*.91,
+    1.28,
+    ARG,
+    10,
+    false,
+    0,
+    0
+  );
+
+
+  /* football */
+
+  ball();
+
+
+  /* aiming line */
+
+  if(drag&&!shot){
+
+    X.strokeStyle="#fff";
+
+    X.lineWidth=3;
+
+    X.setLineDash([
+      8,
+      8
+    ]);
+
+    X.beginPath();
+
+    X.moveTo(
+      W/2,
+      H*.84
+    );
+
+    X.lineTo(
+      ax,
+      ay
+    );
+
+    X.stroke();
+
+    X.setLineDash([]);
+
+
+    let p=
+      clamp(
+        Math.hypot(
+          ax-W/2,
+          ay-H*.84
+        )/280,
+        0,
+        1
+      );
+
+
+    bar.style.width=
+      (p*100)+"%";
+  }
+}
+
+
+/* =========================
+   GAME LOOP
+========================= */
+
+function loop(now){
+
+  let dt=
+    Math.min(
+      .05,
+      (now-last)/1000
+    );
+
+  last=now;
+
+  update(dt);
+
+  draw();
+
+  requestAnimationFrame(
+    loop
+  );
+}
+
+
+requestAnimationFrame(loop);
+
+</script>
+
+</body>
+</html>
